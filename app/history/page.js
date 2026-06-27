@@ -137,7 +137,11 @@ export default function HistoryPage() {
                   </span>
                   {chore.completed && chore.completedAt && (
                     <span className="history-chore-time">
-                      {formatTimestamp(chore.completedAt)}
+                      {chore.completedByName && chore.completedByName !== week.owner?.name ? (
+                        <>Done by <strong>{chore.completedByName}</strong> at {formatTimestamp(chore.completedAt)}</>
+                      ) : (
+                        formatTimestamp(chore.completedAt)
+                      )}
                     </span>
                   )}
                 </div>

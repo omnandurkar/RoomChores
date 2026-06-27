@@ -14,6 +14,7 @@ export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [overridePrompt, setOverridePrompt] = useState({ active: false, step: 0, choreId: null });
   const prevAllDone = useRef(false);
 
   const fetchData = useCallback(async () => {
@@ -50,7 +51,19 @@ export default function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
-  async function handleToggleChore(choreId) {
+  async function handleToggleChore(choreId, force = false) {
+    // Find the chore to see if it's currently completed
+    const chore = data.chores.find(c => c.id === choreId);
+    if (!chore) return;
+
+    const isOwner = user.id === data.weekInfo.person.id;
+    
+    // If not the owner and trying to mark as completed (not undoing)
+    if (!isOwner && !chore.completed && !force) {
+      setOverridePrompt({ active: true, step: 1, choreId });
+      return;
+    }
+
     try {
       const res = await fetch('/api/chores', {
         method: 'POST',
@@ -72,8 +85,22 @@ export default function DashboardPage() {
         setTimeout(() => setShowConfetti(false), 4000);
       }
       prevAllDone.current = result.allDone;
+      setOverridePrompt({ active: false, step: 0, choreId: null });
     } catch (err) {
       console.error('Failed to toggle chore:', err);
+    }
+  }
+
+  function handleOverrideResponse(confirmed) {
+    if (!confirmed) {
+      setOverridePrompt({ active: false, step: 0, choreId: null });
+      return;
+    }
+
+    if (overridePrompt.step === 1) {
+      setOverridePrompt(prev => ({ ...prev, step: 2 }));
+    } else if (overridePrompt.step === 2) {
+      handleToggleChore(overridePrompt.choreId, true);
     }
   }
 
@@ -215,13 +242,49 @@ export default function DashboardPage() {
               <div className="chore-name">{chore.name}</div>
               {chore.completed && chore.completedAt && (
                 <div className="chore-timestamp">
-                  Done {formatTimestamp(chore.completedAt)}
+                  {chore.completedBy !== weekInfo.person.id ? (
+                    <>Done by <strong>{PEOPLE.find(p => p.id === chore.completedBy)?.name}</strong> at {formatTimestamp(chore.completedAt)}</>
+                  ) : (
+                    <>Done {formatTimestamp(chore.completedAt)}</>
+                  )}
                 </div>
               )}
             </div>
           </button>
         ))}
       </div>
+
+      {/* Override Prompt Modal */}
+      {overridePrompt.active && (
+        <div className="switch-modal-overlay">
+          <div className="switch-modal" style={{ textAlign: 'center' }}>
+            <div className="switch-modal-title" style={{ marginBottom: '16px', fontSize: '1.25rem' }}>
+              {overridePrompt.step === 1 ? "Wait a second..." : "Are you sure?"}
+            </div>
+            <p style={{ marginBottom: '24px', color: 'var(--color-text-secondary)' }}>
+              {overridePrompt.step === 1 
+                ? "This isn't your week. Do you still want to do the job?" 
+                : "Just confirming you actually want to mark this as done for them."}
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => handleOverrideResponse(false)}
+                style={{ flex: 1 }}
+              >
+                No
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => handleOverrideResponse(true)}
+                style={{ flex: 1 }}
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Up Next */}
       <div className="up-next-card animate-slide-up" style={{ animationDelay: '0.25s' }} id="up-next-card">
